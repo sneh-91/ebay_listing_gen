@@ -1,4 +1,8 @@
-export function LandingHero() {
+type LandingHeroProps = {
+  onCreateListing: () => void;
+};
+
+export function LandingHero({ onCreateListing }: LandingHeroProps) {
   return (
     <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center">
       <div className="grid w-full gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -23,6 +27,7 @@ export function LandingHero() {
             <button
               type="button"
               className="rounded-2xl bg-accentStrong px-6 py-3 text-base font-medium text-slate-950 transition hover:bg-sky-300"
+              onClick={onCreateListing}
             >
               Create Listing
             </button>
@@ -76,4 +81,3 @@ function FeatureCard({ title, description }: FeatureCardProps) {
     </article>
   );
 }
-
