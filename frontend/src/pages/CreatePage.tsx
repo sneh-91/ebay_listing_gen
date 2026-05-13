@@ -147,7 +147,6 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
       window.sessionStorage.setItem(
         `listing-draft:${draft.draftId}`,
         JSON.stringify({
-          draft,
           previewImages: images.map((image) => ({
             id: image.id,
             previewUrl: image.previewUrl,

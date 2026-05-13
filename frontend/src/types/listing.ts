@@ -55,3 +55,15 @@ export type ListingDraft = {
   buyerQuestions: BuyerQuestion[];
   missingInfoWarnings: string[];
 };
+
+export type DraftUpdatePayload = {
+  title: string;
+  categorySuggestion: string;
+  condition: ListingResolvedCondition;
+  description: string;
+  itemSpecifics: ItemSpecific[];
+  priceSuggestion: {
+    amount: string;
+    rationale: string;
+  };
+};

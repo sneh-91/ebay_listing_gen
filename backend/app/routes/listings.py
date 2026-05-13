@@ -2,8 +2,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
+from app.models.draft_update import DraftUpdatePayload
 from app.models.listing import ListingDraft
 from app.services.mock_listing_service import build_mock_listing_draft
+from app.storage.draft_store import get_draft, save_draft
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -67,7 +69,7 @@ async def generate_listing(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
 
-    return build_mock_listing_draft(
+    draft = build_mock_listing_draft(
         image_count=len(images),
         condition=condition,
         known_issues=known_issues,
@@ -75,3 +77,36 @@ async def generate_listing(
         desired_price=desired_price,
         seller_notes=seller_notes,
     )
+    return save_draft(draft)
+
+
+@router.get("/drafts/{draft_id}", response_model=ListingDraft)
+async def read_draft(draft_id: str) -> ListingDraft:
+    draft = get_draft(draft_id)
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+    return draft
+
+
+@router.put("/drafts/{draft_id}", response_model=ListingDraft)
+async def update_draft(draft_id: str, payload: DraftUpdatePayload) -> ListingDraft:
+    existing_draft = get_draft(draft_id)
+    if not existing_draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+
+    updated_draft = existing_draft.model_copy(
+        update={
+            "title": payload.title,
+            "categorySuggestion": payload.categorySuggestion,
+            "condition": payload.condition,
+            "description": payload.description,
+            "itemSpecifics": payload.itemSpecifics,
+            "priceSuggestion": existing_draft.priceSuggestion.model_copy(
+                update={
+                    "amount": payload.priceSuggestion.amount,
+                    "rationale": payload.priceSuggestion.rationale,
+                }
+            ),
+        }
+    )
+    return save_draft(updated_draft)

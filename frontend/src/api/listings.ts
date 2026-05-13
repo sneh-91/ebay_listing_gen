@@ -1,5 +1,10 @@
 import { apiRequest } from "./client";
-import type { ListingDraft, ListingFormValues, UploadedImage } from "../types/listing";
+import type {
+  DraftUpdatePayload,
+  ListingDraft,
+  ListingFormValues,
+  UploadedImage,
+} from "../types/listing";
 
 export async function generateListingDraft(
   images: UploadedImage[],
@@ -37,5 +42,22 @@ export async function generateListingDraft(
   return apiRequest<ListingDraft>("/api/generate-listing", {
     method: "POST",
     body: formData,
+  });
+}
+
+export async function getListingDraft(draftId: string): Promise<ListingDraft> {
+  return apiRequest<ListingDraft>(`/api/drafts/${draftId}`);
+}
+
+export async function updateListingDraft(
+  draftId: string,
+  payload: DraftUpdatePayload,
+): Promise<ListingDraft> {
+  return apiRequest<ListingDraft>(`/api/drafts/${draftId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
   });
 }
