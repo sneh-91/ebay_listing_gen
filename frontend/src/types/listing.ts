@@ -5,6 +5,8 @@ export type ListingCondition =
   | "Used"
   | "For parts/not working";
 
+export type ListingResolvedCondition = Exclude<ListingCondition, "">;
+
 export type UploadedImage = {
   id: string;
   file: File;
@@ -17,4 +19,39 @@ export type ListingFormValues = {
   includedAccessories: string;
   desiredPrice: string;
   sellerNotes: string;
+};
+
+export type ItemSpecific = {
+  name: string;
+  value: string;
+};
+
+export type PriceSuggestion = {
+  amount: string;
+  currency: string;
+  confidence: string;
+  rationale: string;
+};
+
+export type BuyerQuestion = {
+  question: string;
+  answer: string;
+};
+
+export type ListingDraft = {
+  draftId: string;
+  detectedItem: string;
+  confidence: string;
+  title: string;
+  subtitle: string;
+  categorySuggestion: string;
+  condition: ListingResolvedCondition;
+  conditionDescription: string;
+  description: string;
+  itemSpecifics: ItemSpecific[];
+  priceSuggestion: PriceSuggestion;
+  shippingNotes: string[];
+  searchKeywords: string[];
+  buyerQuestions: BuyerQuestion[];
+  missingInfoWarnings: string[];
 };

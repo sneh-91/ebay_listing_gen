@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { generateListingDraft } from "../api/listings";
+import { ApiError } from "../api/client";
 import { ImagePreviewGrid } from "../components/ImagePreviewGrid";
 import { ImageUploader } from "../components/ImageUploader";
 import { ListingInputForm } from "../components/ListingInputForm";
-import type { ListingFormValues, UploadedImage } from "../types/listing";
+import type {
+  ListingFormValues,
+  UploadedImage,
+} from "../types/listing";
 
 type CreatePageProps = {
   onNavigateHome: () => void;
@@ -18,6 +23,12 @@ const initialFormValues: ListingFormValues = {
   sellerNotes: "",
 };
 
+const loadingSteps = [
+  "Analyzing product photos",
+  "Drafting eBay listing",
+  "Checking required fields",
+];
+
 function createImageId(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`;
 }
@@ -27,8 +38,8 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
   const [formValues, setFormValues] =
     useState<ListingFormValues>(initialFormValues);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingStepIndex, setLoadingStepIndex] = useState(0);
   const imagesRef = useRef<UploadedImage[]>([]);
 
   useEffect(() => {
@@ -43,9 +54,24 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
     };
   }, []);
 
-  const handleSelectFiles = (fileList: FileList | null) => {
-    setNoticeMessage(null);
+  useEffect(() => {
+    if (!isSubmitting) {
+      setLoadingStepIndex(0);
+      return;
+    }
 
+    const intervalId = window.setInterval(() => {
+      setLoadingStepIndex((currentIndex) =>
+        currentIndex === loadingSteps.length - 1 ? 0 : currentIndex + 1,
+      );
+    }, 1200);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isSubmitting]);
+
+  const handleSelectFiles = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) {
       setErrorMessage("Select at least one image to start a listing draft.");
       return;
@@ -72,7 +98,6 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
       return;
     }
 
-    setIsProcessing(true);
     setErrorMessage(null);
 
     const nextImages = selectedFiles.map((file) => ({
@@ -82,12 +107,9 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
     }));
 
     setImages((currentImages) => [...currentImages, ...nextImages]);
-    setIsProcessing(false);
   };
 
   const handleRemoveImage = (imageId: string) => {
-    setNoticeMessage(null);
-
     setImages((currentImages) => {
       const imageToRemove = currentImages.find((image) => image.id === imageId);
 
@@ -109,19 +131,41 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
     }));
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (images.length === 0) {
       setErrorMessage("Add at least one image before continuing.");
-      setNoticeMessage(null);
       return;
     }
 
+    setIsSubmitting(true);
     setErrorMessage(null);
-    setNoticeMessage(
-      "Upload UI is ready. Listing generation begins in Phase 3 when the backend endpoint is added.",
-    );
+
+    try {
+      const draft = await generateListingDraft(images, formValues);
+      window.sessionStorage.setItem(
+        `listing-draft:${draft.draftId}`,
+        JSON.stringify({
+          draft,
+          previewImages: images.map((image) => ({
+            id: image.id,
+            previewUrl: image.previewUrl,
+            name: image.file.name,
+          })),
+        }),
+      );
+      window.history.pushState({}, "", `/review/${draft.draftId}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Something went wrong while generating the listing draft.";
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -145,7 +189,7 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
             </p>
           </div>
           <div className="rounded-2xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-accent">
-            Phase 2 upload flow
+            Generate mock listing drafts
           </div>
         </div>
 
@@ -154,7 +198,7 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
             maxImages={MAX_IMAGES}
             selectedCount={images.length}
             errorMessage={errorMessage}
-            isProcessing={isProcessing}
+            isProcessing={isSubmitting}
             onSelectFiles={handleSelectFiles}
           />
 
@@ -175,16 +219,16 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
                   Review before generation
                 </h2>
                 <p className="max-w-2xl text-sm leading-6 text-muted">
-                  The form stays optional outside the image requirement. Phase 3
-                  will connect this button to the draft-generation API.
+                  Images are required. All seller-input fields remain optional
+                  and are sent with the draft generation request.
                 </p>
               </div>
               <button
                 type="submit"
-                disabled={images.length === 0 || isProcessing}
+                disabled={images.length === 0 || isSubmitting}
                 className="rounded-2xl bg-accentStrong px-6 py-3 text-base font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isProcessing ? "Preparing images..." : "Generate Draft"}
+                {isSubmitting ? loadingSteps[loadingStepIndex] : "Generate Draft"}
               </button>
             </div>
 
@@ -194,11 +238,6 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
               </p>
             ) : null}
 
-            {noticeMessage ? (
-              <p className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
-                {noticeMessage}
-              </p>
-            ) : null}
           </section>
         </form>
       </div>
