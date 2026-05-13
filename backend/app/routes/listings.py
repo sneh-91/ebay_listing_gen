@@ -1,11 +1,16 @@
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.models.draft_update import DraftUpdatePayload
 from app.models.listing import ListingDraft
-from app.services.mock_listing_service import build_mock_listing_draft
+from app.services.openai_service import (
+    ListingGenerationError,
+    generate_listing_with_openai,
+)
 from app.storage.draft_store import get_draft, save_draft
+from app.utils.image_processing import ImageProcessingError, preprocess_image_for_openai
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -41,7 +46,7 @@ def _validate_upload(upload: UploadFile) -> None:
 
 @router.post("/generate-listing", response_model=ListingDraft)
 async def generate_listing(
-    images: list[UploadFile] = File(...),
+    images: list[UploadFile] | None = File(default=None),
     condition: str | None = Form(default=None),
     known_issues: str | None = Form(default=None, alias="knownIssues"),
     included_accessories: str | None = Form(default=None, alias="includedAccessories"),
@@ -53,6 +58,8 @@ async def generate_listing(
 
     if len(images) > MAX_IMAGES:
         _raise_validation_error(f"You can upload up to {MAX_IMAGES} images per listing draft.")
+
+    processed_images: list[str] = []
 
     for upload in images:
         _validate_upload(upload)
@@ -69,13 +76,34 @@ async def generate_listing(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
 
-    draft = build_mock_listing_draft(
-        image_count=len(images),
-        condition=condition,
-        known_issues=known_issues,
-        included_accessories=included_accessories,
-        desired_price=desired_price,
-        seller_notes=seller_notes,
+        try:
+            processed_images.append(
+                preprocess_image_for_openai(
+                    file_bytes=contents,
+                    filename=upload.filename or "uploaded file",
+                )
+            )
+        except ImageProcessingError as exc:
+            _raise_validation_error(str(exc), status.HTTP_400_BAD_REQUEST)
+
+    try:
+        ai_draft = generate_listing_with_openai(
+            image_data_urls=processed_images,
+            condition=condition,
+            known_issues=known_issues,
+            included_accessories=included_accessories,
+            desired_price=desired_price,
+            seller_notes=seller_notes,
+        )
+    except ListingGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    draft = ListingDraft(
+        draftId=f"draft-{uuid4().hex[:12]}",
+        **ai_draft.model_dump(),
     )
     return save_draft(draft)
 

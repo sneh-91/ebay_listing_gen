@@ -1,0 +1,5 @@
+default_permissions = "workspace-no-env"
+
+[permissions.workspace-no-env.filesystem]
+":project_roots" = { "." = "write", "**/.env" = "none", "**/*.env" = "none", "**/.env.*" = "none" }
+glob_scan_max_depth = 5
