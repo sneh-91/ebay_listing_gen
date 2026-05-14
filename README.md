@@ -1,32 +1,30 @@
 # ListCraft AI
 
-ListCraft AI is a full-stack web application for turning product photos into eBay listing drafts and, in later phases, publishing those drafts through eBay's seller APIs.
+ListCraft AI is a full-stack app that turns product photos into editable eBay listing drafts, lets a seller connect their own eBay account with OAuth, validates sandbox setup, and publishes listings through the eBay Sell Inventory API.
 
-Phase 1 establishes the project shell only:
+## Stack
 
-- React + TypeScript + Vite frontend
-- Tailwind CSS dark landing page
-- FastAPI backend
-- `GET /health` endpoint
-- backend CORS configuration
-- starter environment examples
+- `frontend/`: React, TypeScript, Vite, Tailwind
+- `backend/`: FastAPI
 
-## Project Structure
+## Planned End-to-End Flow
 
-```text
-frontend/   React + TypeScript + Vite + Tailwind
-backend/    FastAPI application
-```
+1. Upload up to 3 product images and optional seller notes.
+2. Generate a structured listing draft with OpenAI on the backend.
+3. Review and edit title, condition, description, specifics, and pricing.
+4. Connect an eBay Sandbox seller account through server-side OAuth.
+5. Validate marketplace, policies, inventory location, category support, and image strategy.
+6. Create and publish the listing to eBay Sandbox.
 
-## Prerequisites
+## Requirements
 
 - Node.js 22+
 - npm 10+
 - Python 3.13+
 
-## Frontend Setup
+## Local Development
 
-From [frontend/package.json](/C:/Users/snehi/projects/ebay_listing_gen/frontend/package.json):
+Frontend:
 
 ```bash
 cd frontend
@@ -34,13 +32,7 @@ npm install
 npm run dev
 ```
 
-The frontend runs on `http://localhost:5173`.
-
-Copy `frontend/.env.example` to `frontend/.env` if you need to override the backend API base URL.
-
-## Backend Setup
-
-From [backend/requirements.txt](/C:/Users/snehi/projects/ebay_listing_gen/backend/requirements.txt):
+Backend:
 
 ```bash
 cd backend
@@ -50,31 +42,31 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The backend runs on `http://localhost:8000`.
+Default local URLs:
 
-Copy `backend/.env.example` to `backend/.env` before adding any non-default configuration.
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8000`
+- Health check: `GET /health`
 
-## Phase 1 Verification
+## Environment
 
-1. Start the backend and open `http://localhost:8000/health`.
-2. Confirm the API responds with JSON similar to:
+Backend configuration lives in `backend/.env`.
 
-```json
-{
-  "status": "ok",
-  "service": "listcraft-ai-api"
-}
-```
+Key variables:
 
-3. Start the frontend and open `http://localhost:5173`.
-4. Confirm the landing page shows:
-   - `ListCraft AI`
-   - `Turn product photos into eBay listings.`
-   - `Create Listing`
-   - `Connect eBay`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `DATABASE_URL`
+- `EBAY_CLIENT_ID`
+- `EBAY_CLIENT_SECRET`
+- `EBAY_REDIRECT_URI`
+- `EBAY_ENV` with `sandbox` as the default
+- `EBAY_MARKETPLACE_ID`
+- `FRONTEND_URL`
+- `SECRET_KEY`
 
-## Notes
+## Constraints
 
-- This phase does not include upload flow, OpenAI integration, eBay OAuth, or eBay listing creation.
-- `EBAY_ENV` is documented as `sandbox` by default and production publishing is not enabled.
-- Secrets and tokens must remain server-side in later phases.
+- OpenAI keys, eBay client credentials, access tokens, and refresh tokens stay server-side.
+- eBay Sandbox is the default environment.
+- Production publishing is not enabled by default.

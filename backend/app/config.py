@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,9 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     secret_key: str = "change-me"
+    database_url: str = "sqlite:///./listcraft.db"
     openai_api_key: str = ""
     openai_model: str = "gpt-5.4-mini"
-    ebay_env: str = "sandbox"
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
+    ebay_redirect_uri: str = ""
+    ebay_env: Literal["sandbox", "production"] = "sandbox"
     ebay_marketplace_id: str = "EBAY_CA"
 
     model_config = SettingsConfigDict(

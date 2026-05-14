@@ -1,8 +1,34 @@
+import type { EbayConnectionStatus } from "../types/ebay";
+
 type LandingHeroProps = {
   onCreateListing: () => void;
+  onConnectEbay: () => void;
+  ebayStatus: EbayConnectionStatus | null;
+  isCheckingEbayStatus: boolean;
+  isConnectingEbay: boolean;
+  statusMessage: string | null;
+  statusTone: "success" | "error" | null;
 };
 
-export function LandingHero({ onCreateListing }: LandingHeroProps) {
+export function LandingHero({
+  onCreateListing,
+  onConnectEbay,
+  ebayStatus,
+  isCheckingEbayStatus,
+  isConnectingEbay,
+  statusMessage,
+  statusTone,
+}: LandingHeroProps) {
+  const ebayConnected = ebayStatus?.connected ?? false;
+  const ebayConfigured = ebayStatus?.configured ?? false;
+  const ebayStatusLabel = isCheckingEbayStatus
+    ? "Checking eBay connection"
+    : ebayConnected
+      ? `Connected to eBay ${ebayStatus?.environment}`
+      : ebayConfigured
+        ? `Not connected to eBay ${ebayStatus?.environment}`
+        : "Backend eBay OAuth not configured";
+
   return (
     <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center">
       <div className="grid w-full gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -23,6 +49,20 @@ export function LandingHero({ onCreateListing }: LandingHeroProps) {
               credentials in the browser.
             </p>
           </div>
+          <div className="rounded-2xl border border-white/10 bg-surface/70 px-4 py-3 text-sm text-muted">
+            {ebayStatusLabel}
+          </div>
+          {statusMessage ? (
+            <p
+              className={
+                statusTone === "error"
+                  ? "rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
+                  : "rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50"
+              }
+            >
+              {statusMessage}
+            </p>
+          ) : null}
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
@@ -33,9 +73,15 @@ export function LandingHero({ onCreateListing }: LandingHeroProps) {
             </button>
             <button
               type="button"
-              className="rounded-2xl border border-border bg-surface/80 px-6 py-3 text-base font-medium text-text transition hover:border-sky-300/60 hover:bg-surfaceAlt"
+              className="rounded-2xl border border-border bg-surface/80 px-6 py-3 text-base font-medium text-text transition hover:border-sky-300/60 hover:bg-surfaceAlt disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={onConnectEbay}
+              disabled={isConnectingEbay || !ebayConfigured}
             >
-              Connect eBay
+              {isConnectingEbay
+                ? "Redirecting to eBay..."
+                : ebayConnected
+                  ? "Reconnect eBay"
+                  : "Connect eBay"}
             </button>
           </div>
         </div>
