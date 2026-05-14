@@ -123,7 +123,21 @@ async def generate_listing(
     draft = ListingDraft(
         draftId=f"draft-{uuid4().hex[:12]}",
         **ai_draft.model_dump(),
+        categoryText=ai_draft.categorySuggestion,
+        categoryId=None,
+        price=ai_draft.priceSuggestion.amount,
+        currency=ai_draft.priceSuggestion.currency,
+        quantity=1,
         imageUrls=[],
+        merchantLocationKey=None,
+        paymentPolicyId=None,
+        fulfillmentPolicyId=None,
+        returnPolicyId=None,
+        publishStatus="draft",
+        sku=None,
+        offerId=None,
+        listingId=None,
+        listingUrl=None,
     )
     stored_images: list[StoredDraftImage] = []
     try:
@@ -179,13 +193,15 @@ async def update_draft(draft_id: str, payload: DraftUpdatePayload, request: Requ
     updated_draft = existing_draft.model_copy(
         update={
             "title": payload.title,
-            "categorySuggestion": payload.categorySuggestion,
+            "categorySuggestion": payload.categoryText,
+            "categoryText": payload.categoryText,
             "condition": payload.condition,
             "description": payload.description,
             "itemSpecifics": payload.itemSpecifics,
+            "price": payload.price,
+            "quantity": payload.quantity,
             "priceSuggestion": existing_draft.priceSuggestion.model_copy(
                 update={
-                    "amount": payload.priceSuggestion.amount,
                     "rationale": payload.priceSuggestion.rationale,
                 }
             ),

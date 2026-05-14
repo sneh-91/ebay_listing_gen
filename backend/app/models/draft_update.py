@@ -1,6 +1,11 @@
+import re
+
 from pydantic import BaseModel, field_validator
 
 from app.models.listing import ConditionValue
+
+
+MONEY_PATTERN = re.compile(r"^\d+(?:\.\d{2})$")
 
 
 class DraftItemSpecificUpdate(BaseModel):
@@ -17,10 +22,9 @@ class DraftItemSpecificUpdate(BaseModel):
 
 
 class DraftPriceSuggestionUpdate(BaseModel):
-    amount: str
     rationale: str
 
-    @field_validator("amount", "rationale")
+    @field_validator("rationale")
     @classmethod
     def validate_required_text(cls, value: str) -> str:
         trimmed = value.strip()
@@ -31,19 +35,36 @@ class DraftPriceSuggestionUpdate(BaseModel):
 
 class DraftUpdatePayload(BaseModel):
     title: str
-    categorySuggestion: str
+    categoryText: str
     condition: ConditionValue
     description: str
     itemSpecifics: list[DraftItemSpecificUpdate]
+    price: str
+    quantity: int
     priceSuggestion: DraftPriceSuggestionUpdate
 
-    @field_validator("title", "categorySuggestion", "description")
+    @field_validator("title", "categoryText", "description", "price")
     @classmethod
     def validate_text_fields(cls, value: str) -> str:
         trimmed = value.strip()
         if not trimmed:
             raise ValueError("Draft fields cannot be blank.")
         return trimmed
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not MONEY_PATTERN.fullmatch(trimmed):
+            raise ValueError("Price must be a positive amount with two decimal places.")
+        return trimmed
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Quantity must be at least 1.")
+        return value
 
     @field_validator("itemSpecifics")
     @classmethod

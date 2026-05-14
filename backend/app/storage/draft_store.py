@@ -11,6 +11,29 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_payload(payload: dict, image_urls: list[str] | None = None) -> dict:
+    normalized = dict(payload)
+    normalized.setdefault("categoryText", normalized.get("categorySuggestion", ""))
+    normalized.setdefault("categoryId", None)
+
+    price_suggestion = normalized.get("priceSuggestion", {}) or {}
+    normalized.setdefault("price", price_suggestion.get("amount", "0.00"))
+    normalized.setdefault("currency", price_suggestion.get("currency", "CAD"))
+    normalized.setdefault("quantity", 1)
+
+    normalized["imageUrls"] = image_urls if image_urls is not None else normalized.get("imageUrls", [])
+    normalized.setdefault("merchantLocationKey", None)
+    normalized.setdefault("paymentPolicyId", None)
+    normalized.setdefault("fulfillmentPolicyId", None)
+    normalized.setdefault("returnPolicyId", None)
+    normalized.setdefault("publishStatus", "draft")
+    normalized.setdefault("sku", None)
+    normalized.setdefault("offerId", None)
+    normalized.setdefault("listingId", None)
+    normalized.setdefault("listingUrl", None)
+    return normalized
+
+
 def _replace_draft_images(
     session,
     draft_id: str,
@@ -89,10 +112,10 @@ def save_draft(
         image_urls = _load_draft_image_urls(session, draft.draftId, session_id)
 
     return ListingDraft.model_validate(
-        {
-            **json.loads(payload_json),
-            "imageUrls": image_urls or draft.imageUrls,
-        }
+        _normalize_payload(
+            json.loads(payload_json),
+            image_urls=image_urls or draft.imageUrls,
+        )
     )
 
 
@@ -101,6 +124,8 @@ def get_draft(draft_id: str, session_id: str) -> ListingDraft | None:
         record = session.get(ListingDraftRecord, draft_id)
         if not record or record.session_id != session_id:
             return None
-        payload = json.loads(record.payload_json)
-        payload["imageUrls"] = _load_draft_image_urls(session, draft_id, session_id)
+        payload = _normalize_payload(
+            json.loads(record.payload_json),
+            image_urls=_load_draft_image_urls(session, draft_id, session_id),
+        )
         return ListingDraft.model_validate(payload)

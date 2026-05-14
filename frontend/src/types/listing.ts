@@ -38,6 +38,8 @@ export type BuyerQuestion = {
   answer: string;
 };
 
+export type PublishStatus = "draft" | "published" | "publish_failed";
+
 export type ListingDraft = {
   draftId: string;
   detectedItem: string;
@@ -45,26 +47,41 @@ export type ListingDraft = {
   title: string;
   subtitle: string;
   categorySuggestion: string;
+  categoryText: string;
+  categoryId: string | null;
   condition: ListingResolvedCondition;
   conditionDescription: string;
   description: string;
   itemSpecifics: ItemSpecific[];
+  price: string;
+  currency: string;
+  quantity: number;
   priceSuggestion: PriceSuggestion;
   shippingNotes: string[];
   searchKeywords: string[];
   buyerQuestions: BuyerQuestion[];
   missingInfoWarnings: string[];
   imageUrls: string[];
+  merchantLocationKey: string | null;
+  paymentPolicyId: string | null;
+  fulfillmentPolicyId: string | null;
+  returnPolicyId: string | null;
+  publishStatus: PublishStatus;
+  sku: string | null;
+  offerId: string | null;
+  listingId: string | null;
+  listingUrl: string | null;
 };
 
 export type DraftUpdatePayload = {
   title: string;
-  categorySuggestion: string;
+  categoryText: string;
   condition: ListingResolvedCondition;
   description: string;
   itemSpecifics: ItemSpecific[];
+  price: string;
+  quantity: number;
   priceSuggestion: {
-    amount: string;
     rationale: string;
   };
 };

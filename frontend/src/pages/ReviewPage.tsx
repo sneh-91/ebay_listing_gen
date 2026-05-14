@@ -30,12 +30,13 @@ const conditionOptions: Exclude<ListingCondition, "">[] = [
 function buildEditableState(draft: ListingDraft): ReviewDraftState {
   return {
     title: draft.title,
-    categorySuggestion: draft.categorySuggestion,
+    categoryText: draft.categoryText,
     condition: draft.condition,
     description: draft.description,
     itemSpecifics: draft.itemSpecifics,
+    price: draft.price,
+    quantity: draft.quantity,
     priceSuggestion: {
-      amount: draft.priceSuggestion.amount,
       rationale: draft.priceSuggestion.rationale,
     },
   };
@@ -296,6 +297,9 @@ export function ReviewPage({
               <p className="mt-1 text-sm leading-6 text-muted">
                 Subtitle: {draft.subtitle}
               </p>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                Publish status: {draft.publishStatus}
+              </p>
             </div>
 
             <EditableField label="Title">
@@ -311,10 +315,10 @@ export function ReviewPage({
               <EditableField label="Category suggestion">
                 <input
                   type="text"
-                  value={formState.categorySuggestion}
+                  value={formState.categoryText}
                   className="w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-text outline-none transition focus:border-sky-300/60"
                   onChange={(event) =>
-                    setField("categorySuggestion", event.target.value)
+                    setField("categoryText", event.target.value)
                   }
                 />
               </EditableField>
@@ -362,17 +366,15 @@ export function ReviewPage({
           </div>
 
           <div className="space-y-6">
+            <PublishDetailsCard draft={draft} />
             <PriceSuggestionCard
-              amount={formState.priceSuggestion.amount}
-              currency={draft.priceSuggestion.currency}
+              price={formState.price}
+              quantity={formState.quantity}
+              currency={draft.currency}
               confidence={draft.priceSuggestion.confidence}
               rationale={formState.priceSuggestion.rationale}
-              onAmountChange={(value) =>
-                setField("priceSuggestion", {
-                  ...formState.priceSuggestion,
-                  amount: value,
-                })
-              }
+              onPriceChange={(value) => setField("price", value)}
+              onQuantityChange={(value) => setField("quantity", value)}
               onRationaleChange={(value) =>
                 setField("priceSuggestion", {
                   ...formState.priceSuggestion,
@@ -409,6 +411,37 @@ function StaticListCard({ title, items }: StaticListCardProps) {
             {item}
           </p>
         ))}
+      </div>
+    </section>
+  );
+}
+
+type PublishDetailsCardProps = {
+  draft: ListingDraft;
+};
+
+function PublishDetailsCard({ draft }: PublishDetailsCardProps) {
+  return (
+    <section className="rounded-[1.75rem] border border-white/10 bg-surface/80 p-6">
+      <p className="text-sm uppercase tracking-[0.25em] text-muted">
+        Publish Fields
+      </p>
+      <div className="mt-4 space-y-3 text-sm text-slate-200">
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Category ID: {draft.categoryId || "Pending category resolution"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Merchant location: {draft.merchantLocationKey || "Pending setup"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Payment policy: {draft.paymentPolicyId || "Pending setup"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Fulfillment policy: {draft.fulfillmentPolicyId || "Pending setup"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Return policy: {draft.returnPolicyId || "Pending setup"}
+        </p>
       </div>
     </section>
   );

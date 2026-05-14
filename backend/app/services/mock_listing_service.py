@@ -68,12 +68,17 @@ def build_mock_listing_draft(
         title="Mock eBay listing title based on uploaded photos",
         subtitle="Review and refine before publishing",
         categorySuggestion="Consumer Electronics > Other",
+        categoryText="Consumer Electronics > Other",
+        categoryId=None,
         condition=resolved_condition,
         conditionDescription=(
             "Condition is currently based on seller input and should be confirmed during review."
         ),
         description=" ".join(description_lines),
         itemSpecifics=specifics,
+        price=desired_price or "49.99",
+        currency="CAD",
+        quantity=1,
         priceSuggestion={
             "amount": desired_price or "49.99",
             "currency": "CAD",
@@ -102,4 +107,13 @@ def build_mock_listing_draft(
         ],
         missingInfoWarnings=warnings,
         imageUrls=[],
+        merchantLocationKey=None,
+        paymentPolicyId=None,
+        fulfillmentPolicyId=None,
+        returnPolicyId=None,
+        publishStatus="draft",
+        sku=None,
+        offerId=None,
+        listingId=None,
+        listingUrl=None,
     )
