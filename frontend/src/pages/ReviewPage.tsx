@@ -35,6 +35,13 @@ type ReviewPageProps = {
 };
 
 type ReviewDraftState = DraftUpdatePayload;
+type PublishProgressStage =
+  | "idle"
+  | "saving"
+  | "validating"
+  | "creating_inventory"
+  | "creating_offer"
+  | "publishing";
 
 const conditionOptions: Exclude<ListingCondition, "">[] = [
   "New",
@@ -137,6 +144,8 @@ export function ReviewPage({
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [isLoadingCategory, setIsLoadingCategory] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [publishProgressStage, setPublishProgressStage] =
+    useState<PublishProgressStage>("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishValidationErrors, setPublishValidationErrors] = useState<
     PublishValidationIssue[]
@@ -279,6 +288,7 @@ export function ReviewPage({
     setPublishError(null);
     setPublishValidationErrors([]);
     setPublishResult(null);
+    setPublishProgressStage("idle");
   };
 
   const saveDraftForReview = async (showSavedMessage: boolean): Promise<ListingDraft | null> => {
@@ -358,12 +368,27 @@ export function ReviewPage({
     setPublishResult(null);
     setErrorMessage(null);
     setStatusMessage(null);
+    setPublishProgressStage("saving");
 
     const savedDraft = await saveDraftForReview(false);
     if (!savedDraft) {
+      setPublishProgressStage("idle");
       setIsPublishing(false);
       return;
     }
+
+    setPublishProgressStage("validating");
+    const progressTimers = [
+      window.setTimeout(() => {
+        setPublishProgressStage("creating_inventory");
+      }, 350),
+      window.setTimeout(() => {
+        setPublishProgressStage("creating_offer");
+      }, 950),
+      window.setTimeout(() => {
+        setPublishProgressStage("publishing");
+      }, 1600),
+    ];
 
     try {
       const result = await createEbayListing(draftId);
@@ -372,7 +397,7 @@ export function ReviewPage({
       setFormState(buildEditableState(refreshedDraft));
       setItemSpecificsText(stringifyItemSpecifics(refreshedDraft.itemSpecifics));
       setPublishResult(result);
-      setStatusMessage("eBay sandbox listing created.");
+      setStatusMessage("eBay Canada sandbox listing created.");
     } catch (error) {
       if (error instanceof ApiError && isPublishValidationErrorDetail(error.detail)) {
         setPublishError(error.detail.message);
@@ -385,6 +410,8 @@ export function ReviewPage({
         setPublishError(message);
       }
     } finally {
+      progressTimers.forEach((timerId) => window.clearTimeout(timerId));
+      setPublishProgressStage("idle");
       setIsPublishing(false);
     }
   };
@@ -472,8 +499,8 @@ export function ReviewPage({
                 {draft.publishStatus === "published"
                   ? "Listing Published"
                   : isPublishing
-                    ? "Creating eBay Sandbox Listing..."
-                    : "Create eBay Sandbox Listing"}
+                    ? "Creating eBay Canada Sandbox Listing..."
+                    : "Create eBay Canada Sandbox Listing"}
               </button>
             </div>
           </div>
@@ -513,6 +540,10 @@ export function ReviewPage({
               ))}
             </div>
           </section>
+        ) : null}
+
+        {isPublishing || publishProgressStage !== "idle" ? (
+          <PublishProgressCard stage={publishProgressStage} />
         ) : null}
 
         {publishResult ? <PublishResultCard result={publishResult} /> : null}
@@ -853,6 +884,54 @@ function PublishResultCard({ result }: PublishResultCardProps) {
           ))}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+type PublishProgressCardProps = {
+  stage: PublishProgressStage;
+};
+
+function PublishProgressCard({ stage }: PublishProgressCardProps) {
+  const steps: Array<{ key: PublishProgressStage; label: string }> = [
+    { key: "saving", label: "Saving latest draft edits" },
+    { key: "validating", label: "Validating publish requirements" },
+    { key: "creating_inventory", label: "Creating inventory item" },
+    { key: "creating_offer", label: "Creating eBay offer" },
+    { key: "publishing", label: "Publishing listing to eBay" },
+  ];
+  const currentIndex = steps.findIndex((step) => step.key === stage);
+
+  return (
+    <section className="rounded-[1.75rem] border border-sky-400/20 bg-sky-400/10 p-6">
+      <p className="text-sm uppercase tracking-[0.25em] text-sky-100">
+        Publish Progress
+      </p>
+      <p className="mt-2 text-sm text-sky-50">
+        The backend publish flow runs as one request, so these stages reflect the current
+        app progress state during the request.
+      </p>
+      <div className="mt-4 space-y-3">
+        {steps.map((step, index) => {
+          const isActive = index === currentIndex;
+          const isComplete = currentIndex > index;
+
+          return (
+            <p
+              key={step.key}
+              className={
+                isActive
+                  ? "rounded-2xl border border-sky-300/30 bg-slate-950/20 px-4 py-3 text-sm text-sky-50"
+                  : isComplete
+                    ? "rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50"
+                    : "rounded-2xl border border-white/8 bg-surfaceAlt/50 px-4 py-3 text-sm text-muted"
+              }
+            >
+              {step.label}
+            </p>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -26,7 +26,7 @@ export function LandingPage({ onCreateListing }: LandingPageProps) {
     const callbackMessage = params.get("message");
 
     if (ebayResult === "connected") {
-      setStatusMessage("eBay Sandbox account connected.");
+      setStatusMessage("eBay Canada Sandbox account connected.");
       setStatusTone("success");
     } else if (ebayResult === "error") {
       setStatusMessage(
