@@ -5,13 +5,16 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.models.ebay_oauth import EbayConnectionStatus, EbayOAuthStartResponse
+from app.models.ebay_setup import EbaySetupStatus
 from app.services.ebay_oauth_service import (
     EbayOAuthError,
     build_authorization_url,
     exchange_authorization_code,
     get_configuration_status,
 )
+from app.services.ebay_setup_service import get_setup_status
 from app.services.session_service import get_request_session_id
+from app.storage.draft_store import get_draft
 
 router = APIRouter(prefix="/api/ebay", tags=["ebay"])
 
@@ -70,5 +73,21 @@ async def ebay_oauth_callback(
 async def ebay_status(request: Request) -> EbayConnectionStatus:
     try:
         return get_configuration_status(get_request_session_id(request))
+    except EbayOAuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/setup/status", response_model=EbaySetupStatus)
+async def ebay_setup_status(
+    request: Request,
+    draftId: str = Query(...),
+) -> EbaySetupStatus:
+    session_id = get_request_session_id(request)
+    draft = get_draft(draftId, session_id)
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+
+    try:
+        return get_setup_status(session_id, draft)
     except EbayOAuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

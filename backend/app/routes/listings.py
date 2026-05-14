@@ -200,6 +200,10 @@ async def update_draft(draft_id: str, payload: DraftUpdatePayload, request: Requ
             "itemSpecifics": payload.itemSpecifics,
             "price": payload.price,
             "quantity": payload.quantity,
+            "merchantLocationKey": payload.merchantLocationKey,
+            "paymentPolicyId": payload.paymentPolicyId,
+            "fulfillmentPolicyId": payload.fulfillmentPolicyId,
+            "returnPolicyId": payload.returnPolicyId,
             "priceSuggestion": existing_draft.priceSuggestion.model_copy(
                 update={
                     "rationale": payload.priceSuggestion.rationale,

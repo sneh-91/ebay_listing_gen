@@ -81,6 +81,10 @@ export type DraftUpdatePayload = {
   itemSpecifics: ItemSpecific[];
   price: string;
   quantity: number;
+  merchantLocationKey: string | null;
+  paymentPolicyId: string | null;
+  fulfillmentPolicyId: string | null;
+  returnPolicyId: string | null;
   priceSuggestion: {
     rationale: string;
   };

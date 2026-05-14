@@ -41,6 +41,10 @@ class DraftUpdatePayload(BaseModel):
     itemSpecifics: list[DraftItemSpecificUpdate]
     price: str
     quantity: int
+    merchantLocationKey: str | None = None
+    paymentPolicyId: str | None = None
+    fulfillmentPolicyId: str | None = None
+    returnPolicyId: str | None = None
     priceSuggestion: DraftPriceSuggestionUpdate
 
     @field_validator("title", "categoryText", "description", "price")
@@ -65,6 +69,19 @@ class DraftUpdatePayload(BaseModel):
         if value < 1:
             raise ValueError("Quantity must be at least 1.")
         return value
+
+    @field_validator(
+        "merchantLocationKey",
+        "paymentPolicyId",
+        "fulfillmentPolicyId",
+        "returnPolicyId",
+    )
+    @classmethod
+    def normalize_optional_ids(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
     @field_validator("itemSpecifics")
     @classmethod

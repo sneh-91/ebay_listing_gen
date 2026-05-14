@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
+import { getEbaySetupStatus } from "../api/ebay";
 import { getListingDraft, updateListingDraft } from "../api/listings";
 import { BuyerQuestionsCard } from "../components/BuyerQuestionsCard";
 import { EditableField } from "../components/EditableField";
 import { PriceSuggestionCard } from "../components/PriceSuggestionCard";
 import { WarningBanner } from "../components/WarningBanner";
+import type { EbayLocationOption, EbayPolicyOption, EbaySetupStatus } from "../types/ebay";
 import type {
   DraftUpdatePayload,
   ItemSpecific,
@@ -36,9 +38,26 @@ function buildEditableState(draft: ListingDraft): ReviewDraftState {
     itemSpecifics: draft.itemSpecifics,
     price: draft.price,
     quantity: draft.quantity,
+    merchantLocationKey: draft.merchantLocationKey,
+    paymentPolicyId: draft.paymentPolicyId,
+    fulfillmentPolicyId: draft.fulfillmentPolicyId,
+    returnPolicyId: draft.returnPolicyId,
     priceSuggestion: {
       rationale: draft.priceSuggestion.rationale,
     },
+  };
+}
+
+function applySetupSelections(
+  draft: ListingDraft,
+  setupStatus: EbaySetupStatus,
+): ListingDraft {
+  return {
+    ...draft,
+    merchantLocationKey: setupStatus.selections.merchantLocationKey,
+    paymentPolicyId: setupStatus.selections.paymentPolicyId,
+    fulfillmentPolicyId: setupStatus.selections.fulfillmentPolicyId,
+    returnPolicyId: setupStatus.selections.returnPolicyId,
   };
 }
 
@@ -76,9 +95,41 @@ export function ReviewPage({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<EbaySetupStatus | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [isLoadingSetup, setIsLoadingSetup] = useState(false);
 
   useEffect(() => {
     let isActive = true;
+
+    const loadSetupStatus = async (baseDraft: ListingDraft) => {
+      setIsLoadingSetup(true);
+      setSetupError(null);
+
+      try {
+        const nextSetupStatus = await getEbaySetupStatus(draftId);
+        if (!isActive) {
+          return;
+        }
+        const syncedDraft = applySetupSelections(baseDraft, nextSetupStatus);
+        setSetupStatus(nextSetupStatus);
+        setDraft(syncedDraft);
+        setFormState(buildEditableState(syncedDraft));
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Unable to load eBay setup status.";
+        setSetupError(message);
+      } finally {
+        if (isActive) {
+          setIsLoadingSetup(false);
+        }
+      }
+    };
 
     const loadDraft = async () => {
       setIsLoading(true);
@@ -92,6 +143,7 @@ export function ReviewPage({
         setDraft(nextDraft);
         setFormState(buildEditableState(nextDraft));
         setItemSpecificsText(stringifyItemSpecifics(nextDraft.itemSpecifics));
+        void loadSetupStatus(nextDraft);
       } catch (error) {
         if (!isActive) {
           return;
@@ -146,8 +198,20 @@ export function ReviewPage({
 
     try {
       const updatedDraft = await updateListingDraft(draftId, payload);
-      setDraft(updatedDraft);
-      setFormState(buildEditableState(updatedDraft));
+      let nextDraft = updatedDraft;
+      try {
+        const nextSetupStatus = await getEbaySetupStatus(draftId);
+        setSetupStatus(nextSetupStatus);
+        nextDraft = applySetupSelections(updatedDraft, nextSetupStatus);
+      } catch (error) {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Unable to refresh eBay setup status.";
+        setSetupError(message);
+      }
+      setDraft(nextDraft);
+      setFormState(buildEditableState(nextDraft));
       setItemSpecificsText(stringifyItemSpecifics(updatedDraft.itemSpecifics));
       setStatusMessage("Draft saved.");
     } catch (error) {
@@ -367,6 +431,13 @@ export function ReviewPage({
 
           <div className="space-y-6">
             <PublishDetailsCard draft={draft} />
+            <EbaySetupCard
+              setupStatus={setupStatus}
+              setupError={setupError}
+              isLoadingSetup={isLoadingSetup}
+              values={formState}
+              onChange={setField}
+            />
             <PriceSuggestionCard
               price={formState.price}
               quantity={formState.quantity}
@@ -444,5 +515,168 @@ function PublishDetailsCard({ draft }: PublishDetailsCardProps) {
         </p>
       </div>
     </section>
+  );
+}
+
+type EbaySetupCardProps = {
+  setupStatus: EbaySetupStatus | null;
+  setupError: string | null;
+  isLoadingSetup: boolean;
+  values: ReviewDraftState;
+  onChange: <Key extends keyof ReviewDraftState>(
+    field: Key,
+    value: ReviewDraftState[Key],
+  ) => void;
+};
+
+function EbaySetupCard({
+  setupStatus,
+  setupError,
+  isLoadingSetup,
+  values,
+  onChange,
+}: EbaySetupCardProps) {
+  return (
+    <section className="rounded-[1.75rem] border border-white/10 bg-surface/80 p-6">
+      <p className="text-sm uppercase tracking-[0.25em] text-muted">
+        eBay Setup
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        Marketplace: {setupStatus?.marketplaceId || "EBAY_CA"}
+      </p>
+
+      {isLoadingSetup ? (
+        <p className="mt-4 rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3 text-sm text-muted">
+          Checking seller setup...
+        </p>
+      ) : null}
+
+      {setupError ? (
+        <p className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+          {setupError}
+        </p>
+      ) : null}
+
+      {setupStatus?.blockers.length ? (
+        <div className="mt-4 space-y-3">
+          {setupStatus.blockers.map((blocker) => (
+            <p
+              key={blocker.code}
+              className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
+            >
+              {blocker.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {setupStatus?.warnings.length ? (
+        <div className="mt-4 space-y-3">
+          {setupStatus.warnings.map((warning) => (
+            <p
+              key={warning.code}
+              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-50"
+            >
+              {warning.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {setupStatus ? (
+        <div className="mt-5 space-y-4">
+          <PolicySelect
+            label="Payment policy"
+            value={values.paymentPolicyId}
+            options={setupStatus.paymentPolicies}
+            placeholder="Choose a payment policy"
+            onChange={(value) => onChange("paymentPolicyId", value)}
+          />
+          <PolicySelect
+            label="Fulfillment policy"
+            value={values.fulfillmentPolicyId}
+            options={setupStatus.fulfillmentPolicies}
+            placeholder="Choose a fulfillment policy"
+            onChange={(value) => onChange("fulfillmentPolicyId", value)}
+          />
+          <PolicySelect
+            label="Return policy"
+            value={values.returnPolicyId}
+            options={setupStatus.returnPolicies}
+            placeholder="Choose a return policy"
+            onChange={(value) => onChange("returnPolicyId", value)}
+          />
+          <LocationSelect
+            value={values.merchantLocationKey}
+            options={setupStatus.merchantLocations}
+            onChange={(value) => onChange("merchantLocationKey", value)}
+          />
+          <p className="text-xs text-muted">
+            Save the draft after changing setup selections.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type PolicySelectProps = {
+  label: string;
+  value: string | null;
+  options: EbayPolicyOption[];
+  placeholder: string;
+  onChange: (value: string | null) => void;
+};
+
+function PolicySelect({
+  label,
+  value,
+  options,
+  placeholder,
+  onChange,
+}: PolicySelectProps) {
+  return (
+    <EditableField label={label}>
+      <select
+        value={value || ""}
+        className="w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-text outline-none transition focus:border-sky-300/60"
+        onChange={(event) => onChange(event.target.value || null)}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.name}
+            {option.isDefault ? " (Default)" : ""}
+          </option>
+        ))}
+      </select>
+    </EditableField>
+  );
+}
+
+type LocationSelectProps = {
+  value: string | null;
+  options: EbayLocationOption[];
+  onChange: (value: string | null) => void;
+};
+
+function LocationSelect({ value, options, onChange }: LocationSelectProps) {
+  return (
+    <EditableField label="Merchant location">
+      <select
+        value={value || ""}
+        className="w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-text outline-none transition focus:border-sky-300/60"
+        onChange={(event) => onChange(event.target.value || null)}
+      >
+        <option value="">Choose a merchant location</option>
+        {options.map((option) => (
+          <option key={option.merchantLocationKey} value={option.merchantLocationKey}>
+            {option.name}
+            {option.city ? ` - ${option.city}` : ""}
+            {option.country ? `, ${option.country}` : ""}
+          </option>
+        ))}
+      </select>
+    </EditableField>
   );
 }
