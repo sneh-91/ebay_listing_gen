@@ -20,6 +20,53 @@ def _inventory_root() -> str:
     return "https://api.sandbox.ebay.com/sell/inventory/v1"
 
 
+def _additional_info_from_error(error: dict) -> str | None:
+    for parameter in error.get("parameters") or []:
+        if parameter.get("name") == "additionalInfo" and parameter.get("value"):
+            return parameter["value"]
+    return None
+
+
+def _friendly_error_message(error: dict) -> str:
+    error_id = error.get("errorId")
+    additional_info = _additional_info_from_error(error)
+    base_message = error.get("message") or "eBay Inventory API error."
+
+    if error_id == 25005:
+        return "The selected eBay category is invalid for this listing."
+    if error_id == 25007:
+        return "The selected fulfillment policy is invalid for this listing."
+    if error_id == 25008:
+        return "The selected payment policy is invalid for this listing."
+    if error_id == 25009:
+        return "The selected return policy is invalid for this listing."
+    if error_id == 25012:
+        return "The selected merchant location is invalid or unavailable."
+    if error_id == 25014:
+        return "The listing images are invalid for eBay publish."
+    if error_id == 25015:
+        return "One or more listing image URLs are invalid or not accessible by eBay."
+    if error_id == 25017:
+        return additional_info or "eBay is still missing required listing information."
+    if error_id == 25021:
+        return "The selected item condition data is invalid for this listing."
+    if error_id == 25025:
+        return "eBay rejected the request because this listing is being updated concurrently. Try again."
+    if error_id == 25026:
+        return "The seller account has hit an eBay selling limit for this publish attempt."
+    if error_id == 25029:
+        return additional_info or "A required field for this eBay category is missing."
+
+    return base_message
+
+
+def _extract_error_message(payload: dict) -> str | None:
+    errors = payload.get("errors") or []
+    if errors:
+        return "; ".join(_friendly_error_message(error) for error in errors)
+    return payload.get("message") or payload.get("error_description") or payload.get("error")
+
+
 def _request_json(method: str, url: str, access_token: str, payload: dict | None = None) -> dict:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = Request(
@@ -41,11 +88,7 @@ def _request_json(method: str, url: str, access_token: str, payload: dict | None
         response_text = exc.read().decode("utf-8", errors="replace")
         try:
             payload = json.loads(response_text)
-            errors = payload.get("errors") or []
-            if errors:
-                message = "; ".join(error.get("message", "eBay Inventory API error") for error in errors)
-            else:
-                message = payload.get("message") or payload.get("error_description") or payload.get("error")
+            message = _extract_error_message(payload)
         except json.JSONDecodeError:
             message = None
         status_code = exc.code if 400 <= exc.code < 500 else 502
