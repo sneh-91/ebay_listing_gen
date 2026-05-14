@@ -3,6 +3,7 @@ import type {
   EbayCategoryStatus,
   EbayConnectionStatus,
   EbayOAuthStartResponse,
+  PublishListingResult,
   EbaySetupStatus,
 } from "../types/ebay";
 
@@ -21,4 +22,14 @@ export async function getEbaySetupStatus(draftId: string): Promise<EbaySetupStat
 
 export async function getEbayCategoryStatus(draftId: string): Promise<EbayCategoryStatus> {
   return apiRequest<EbayCategoryStatus>(`/api/ebay/category/status?draftId=${encodeURIComponent(draftId)}`);
+}
+
+export async function createEbayListing(draftId: string): Promise<PublishListingResult> {
+  return apiRequest<PublishListingResult>("/api/ebay/create-listing", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ draftId }),
+  });
 }

@@ -79,3 +79,28 @@ export type EbayCategoryStatus = {
   requiredAspects: EbayAspectRequirement[];
   missingRequiredAspects: string[];
 };
+
+export type PublishValidationIssue = {
+  field: string;
+  message: string;
+};
+
+export type PublishValidationErrorDetail = {
+  message: string;
+  errors: PublishValidationIssue[];
+};
+
+export type PublishWarning = {
+  message: string;
+};
+
+export type PublishListingResult = {
+  draftId: string;
+  success: boolean;
+  environment: string;
+  sku: string;
+  offerId: string;
+  listingId: string | null;
+  listingUrl: string | null;
+  warnings: PublishWarning[];
+};

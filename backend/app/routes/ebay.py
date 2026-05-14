@@ -6,17 +6,30 @@ from fastapi.responses import RedirectResponse
 from app.config import get_settings
 from app.models.ebay_oauth import EbayConnectionStatus, EbayOAuthStartResponse
 from app.models.ebay_category import EbayCategoryStatus
+from app.models.ebay_publish import (
+    CreateListingRequest,
+    PublishListingResult,
+    PublishValidationErrorDetail,
+    PublishWarning,
+)
 from app.models.ebay_setup import EbaySetupStatus
+from app.services.ebay_inventory_service import (
+    EbayInventoryError,
+    create_or_replace_inventory_item,
+    create_or_update_offer,
+    publish_offer,
+)
 from app.services.ebay_oauth_service import (
     EbayOAuthError,
     build_authorization_url,
     exchange_authorization_code,
     get_configuration_status,
 )
+from app.services.ebay_publish_validation_service import validate_publishable_draft
 from app.services.ebay_setup_service import get_setup_status
 from app.services.ebay_taxonomy_service import EbayTaxonomyError, get_category_status
 from app.services.session_service import get_request_session_id
-from app.storage.draft_store import get_draft
+from app.storage.draft_store import get_draft, save_draft
 
 router = APIRouter(prefix="/api/ebay", tags=["ebay"])
 
@@ -109,3 +122,76 @@ async def ebay_category_status(
         return get_category_status(session_id, draft)
     except EbayTaxonomyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/create-listing", response_model=PublishListingResult)
+async def create_listing(
+    request: Request,
+    payload: CreateListingRequest,
+) -> PublishListingResult:
+    session_id = get_request_session_id(request)
+    draft = get_draft(payload.draftId, session_id)
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+
+    if draft.publishStatus == "published" and draft.sku and draft.offerId:
+        return PublishListingResult(
+            draftId=draft.draftId,
+            success=True,
+            environment=get_settings().ebay_env,
+            sku=draft.sku,
+            offerId=draft.offerId,
+            listingId=draft.listingId,
+            listingUrl=draft.listingUrl,
+            warnings=[PublishWarning(message="This draft has already been published.")],
+        )
+
+    validation_issues = validate_publishable_draft(session_id, draft)
+    if validation_issues:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=PublishValidationErrorDetail(
+                message="Fix the draft fields below before publishing to eBay.",
+                errors=validation_issues,
+            ).model_dump(),
+        )
+
+    publish_draft = get_draft(payload.draftId, session_id)
+    if not publish_draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+
+    current_draft = publish_draft
+    try:
+        sku = create_or_replace_inventory_item(session_id, current_draft)
+        current_draft = current_draft.model_copy(update={"sku": sku})
+        offer_id = create_or_update_offer(session_id, current_draft, sku)
+        current_draft = current_draft.model_copy(update={"offerId": offer_id})
+        publish_response = publish_offer(session_id, offer_id)
+    except EbayInventoryError as exc:
+        failed_draft = current_draft.model_copy(update={"publishStatus": "publish_failed"})
+        save_draft(failed_draft, session_id)
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    warnings = [
+        PublishWarning(message=warning.get("message") or "eBay returned a publish warning.")
+        for warning in (publish_response.get("warnings") or [])
+    ]
+    listing_id = publish_response.get("listingId")
+    published_draft = current_draft.model_copy(
+        update={
+            "publishStatus": "published",
+            "listingId": listing_id,
+        }
+    )
+    published_draft = save_draft(published_draft, session_id)
+
+    return PublishListingResult(
+        draftId=published_draft.draftId,
+        success=True,
+        environment=get_settings().ebay_env,
+        sku=published_draft.sku or "",
+        offerId=published_draft.offerId or "",
+        listingId=published_draft.listingId,
+        listingUrl=published_draft.listingUrl,
+        warnings=warnings,
+    )

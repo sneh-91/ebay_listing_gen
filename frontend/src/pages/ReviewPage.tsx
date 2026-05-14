@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
-import { getEbayCategoryStatus, getEbaySetupStatus } from "../api/ebay";
+import {
+  createEbayListing,
+  getEbayCategoryStatus,
+  getEbaySetupStatus,
+} from "../api/ebay";
 import { getListingDraft, updateListingDraft } from "../api/listings";
 import { BuyerQuestionsCard } from "../components/BuyerQuestionsCard";
 import { EditableField } from "../components/EditableField";
@@ -12,6 +16,9 @@ import type {
   EbayCategoryStatus,
   EbayLocationOption,
   EbayPolicyOption,
+  PublishListingResult,
+  PublishValidationErrorDetail,
+  PublishValidationIssue,
   EbaySetupStatus,
 } from "../types/ebay";
 import type {
@@ -90,6 +97,27 @@ function stringifyItemSpecifics(itemSpecifics: ItemSpecific[]): string {
   return itemSpecifics.map((item) => `${item.name}: ${item.value}`).join("\n");
 }
 
+function isPublishValidationErrorDetail(
+  detail: unknown,
+): detail is PublishValidationErrorDetail {
+  if (!detail || typeof detail !== "object") {
+    return false;
+  }
+
+  const candidate = detail as Partial<PublishValidationErrorDetail>;
+  return (
+    typeof candidate.message === "string" &&
+    Array.isArray(candidate.errors) &&
+    candidate.errors.every(
+      (error) =>
+        error &&
+        typeof error === "object" &&
+        "field" in error &&
+        "message" in error,
+    )
+  );
+}
+
 export function ReviewPage({
   draftId,
   onBackToCreate,
@@ -108,6 +136,12 @@ export function ReviewPage({
   const [categoryStatus, setCategoryStatus] = useState<EbayCategoryStatus | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [isLoadingCategory, setIsLoadingCategory] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishValidationErrors, setPublishValidationErrors] = useState<
+    PublishValidationIssue[]
+  >([]);
+  const [publishResult, setPublishResult] = useState<PublishListingResult | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -242,11 +276,14 @@ export function ReviewPage({
         : currentState,
     );
     setStatusMessage(null);
+    setPublishError(null);
+    setPublishValidationErrors([]);
+    setPublishResult(null);
   };
 
-  const handleSave = async () => {
+  const saveDraftForReview = async (showSavedMessage: boolean): Promise<ListingDraft | null> => {
     if (!formState) {
-      return;
+      return null;
     }
 
     const payload: DraftUpdatePayload = {
@@ -257,6 +294,8 @@ export function ReviewPage({
     setIsSaving(true);
     setErrorMessage(null);
     setStatusMessage(null);
+    setPublishError(null);
+    setPublishValidationErrors([]);
 
     try {
       const updatedDraft = await updateListingDraft(draftId, payload);
@@ -292,15 +331,61 @@ export function ReviewPage({
       setDraft(nextDraft);
       setFormState(buildEditableState(nextDraft));
       setItemSpecificsText(stringifyItemSpecifics(updatedDraft.itemSpecifics));
-      setStatusMessage("Draft saved.");
+      if (showSavedMessage) {
+        setStatusMessage("Draft saved.");
+      }
+      return nextDraft;
     } catch (error) {
       const message =
         error instanceof ApiError
           ? error.message
           : "Unable to save draft changes.";
       setErrorMessage(message);
+      return null;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    await saveDraftForReview(true);
+  };
+
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    setPublishError(null);
+    setPublishValidationErrors([]);
+    setPublishResult(null);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    const savedDraft = await saveDraftForReview(false);
+    if (!savedDraft) {
+      setIsPublishing(false);
+      return;
+    }
+
+    try {
+      const result = await createEbayListing(draftId);
+      const refreshedDraft = await getListingDraft(draftId);
+      setDraft(refreshedDraft);
+      setFormState(buildEditableState(refreshedDraft));
+      setItemSpecificsText(stringifyItemSpecifics(refreshedDraft.itemSpecifics));
+      setPublishResult(result);
+      setStatusMessage("eBay sandbox listing created.");
+    } catch (error) {
+      if (error instanceof ApiError && isPublishValidationErrorDetail(error.detail)) {
+        setPublishError(error.detail.message);
+        setPublishValidationErrors(error.detail.errors);
+      } else {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Unable to create the eBay sandbox listing.";
+        setPublishError(message);
+      }
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -380,10 +465,15 @@ export function ReviewPage({
               </button>
               <button
                 type="button"
-                className="rounded-2xl border border-border bg-surfaceAlt/80 px-4 py-3 text-sm font-medium text-text opacity-70"
-                disabled
+                className="rounded-2xl border border-border bg-surfaceAlt/80 px-4 py-3 text-sm font-medium text-text transition hover:border-sky-300/40 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handlePublish}
+                disabled={isPublishing || isSaving || draft.publishStatus === "published"}
               >
-                Create eBay Sandbox Listing
+                {draft.publishStatus === "published"
+                  ? "Listing Published"
+                  : isPublishing
+                    ? "Creating eBay Sandbox Listing..."
+                    : "Create eBay Sandbox Listing"}
               </button>
             </div>
           </div>
@@ -400,6 +490,32 @@ export function ReviewPage({
             {statusMessage}
           </p>
         ) : null}
+
+        {publishError ? (
+          <p className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+            {publishError}
+          </p>
+        ) : null}
+
+        {publishValidationErrors.length ? (
+          <section className="rounded-[1.75rem] border border-rose-400/20 bg-rose-400/10 p-6">
+            <p className="text-sm uppercase tracking-[0.25em] text-rose-100">
+              Publish Blockers
+            </p>
+            <div className="mt-4 space-y-3">
+              {publishValidationErrors.map((error) => (
+                <p
+                  key={`${error.field}:${error.message}`}
+                  className="rounded-2xl border border-rose-300/20 bg-slate-950/20 px-4 py-3 text-sm text-rose-50"
+                >
+                  {error.field}: {error.message}
+                </p>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {publishResult ? <PublishResultCard result={publishResult} /> : null}
 
         <WarningBanner warnings={draft.missingInfoWarnings} />
 
@@ -686,7 +802,57 @@ function PublishDetailsCard({ draft }: PublishDetailsCardProps) {
         <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
           Return policy: {draft.returnPolicyId || "Pending setup"}
         </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          SKU: {draft.sku || "Pending publish"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Offer ID: {draft.offerId || "Pending publish"}
+        </p>
+        <p className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3">
+          Listing ID: {draft.listingId || "Pending publish"}
+        </p>
       </div>
+    </section>
+  );
+}
+
+type PublishResultCardProps = {
+  result: PublishListingResult;
+};
+
+function PublishResultCard({ result }: PublishResultCardProps) {
+  return (
+    <section className="rounded-[1.75rem] border border-emerald-400/20 bg-emerald-400/10 p-6">
+      <p className="text-sm uppercase tracking-[0.25em] text-emerald-50">
+        Publish Result
+      </p>
+      <div className="mt-4 space-y-3 text-sm text-emerald-50">
+        <p className="rounded-2xl border border-emerald-300/20 bg-slate-950/20 px-4 py-3">
+          Environment: {result.environment}
+        </p>
+        <p className="rounded-2xl border border-emerald-300/20 bg-slate-950/20 px-4 py-3">
+          SKU: {result.sku}
+        </p>
+        <p className="rounded-2xl border border-emerald-300/20 bg-slate-950/20 px-4 py-3">
+          Offer ID: {result.offerId}
+        </p>
+        <p className="rounded-2xl border border-emerald-300/20 bg-slate-950/20 px-4 py-3">
+          Listing ID: {result.listingId || "Not returned by eBay"}
+        </p>
+      </div>
+
+      {result.warnings.length ? (
+        <div className="mt-4 space-y-3">
+          {result.warnings.map((warning) => (
+            <p
+              key={warning.message}
+              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-50"
+            >
+              {warning.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
