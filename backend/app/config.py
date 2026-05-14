@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     secret_key: str = "change-me"
     database_url: str = "sqlite:///./listcraft.db"
+    session_cookie_name: str = "listcraft_session"
+    session_ttl_days: int = 7
+    session_cookie_secure: bool = False
     openai_api_key: str = ""
     openai_model: str = "gpt-5.4-mini"
     ebay_client_id: str = ""

@@ -4,8 +4,6 @@ from app.models.ebay_oauth import EbayOAuthTokenSet
 from app.storage.db import get_db_session
 from app.storage.schema import OAuthStateRecord, SellerConnectionRecord
 
-GLOBAL_CONNECTION_KEY = "__global__"
-
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -32,20 +30,22 @@ def _prune_expired_states() -> None:
             session.commit()
 
 
-def save_pending_state(state: str, expires_at: datetime) -> None:
+def save_pending_state(state: str, expires_at: datetime, session_id: str) -> None:
     _prune_expired_states()
     now = _serialize_datetime(_utc_now())
 
     with get_db_session() as session:
         record = session.get(OAuthStateRecord, state)
         if record:
+            if record.session_id != session_id:
+                raise ValueError("OAuth state does not belong to the active session.")
             record.expires_at = _serialize_datetime(expires_at)
             record.created_at = now
         else:
             session.add(
                 OAuthStateRecord(
                     state=state,
-                    session_id=None,
+                    session_id=session_id,
                     expires_at=_serialize_datetime(expires_at),
                     created_at=now,
                 )
@@ -53,11 +53,11 @@ def save_pending_state(state: str, expires_at: datetime) -> None:
         session.commit()
 
 
-def consume_pending_state(state: str) -> bool:
+def consume_pending_state(state: str, session_id: str) -> bool:
     _prune_expired_states()
     with get_db_session() as session:
         record = session.get(OAuthStateRecord, state)
-        if not record:
+        if not record or record.session_id != session_id:
             return False
 
         expires_at = _parse_datetime(record.expires_at)
@@ -66,12 +66,15 @@ def consume_pending_state(state: str) -> bool:
         return expires_at > _utc_now()
 
 
-def save_token_set(token_set: EbayOAuthTokenSet) -> EbayOAuthTokenSet:
+def save_token_set(token_set: EbayOAuthTokenSet, session_id: str) -> EbayOAuthTokenSet:
     now = _serialize_datetime(_utc_now())
+    connection_key = session_id
 
     with get_db_session() as session:
-        record = session.get(SellerConnectionRecord, GLOBAL_CONNECTION_KEY)
+        record = session.get(SellerConnectionRecord, connection_key)
         if record:
+            if record.session_id != session_id:
+                raise ValueError("Seller connection does not belong to the active session.")
             record.access_token = token_set.access_token
             record.refresh_token = token_set.refresh_token
             record.token_type = token_set.token_type
@@ -83,8 +86,8 @@ def save_token_set(token_set: EbayOAuthTokenSet) -> EbayOAuthTokenSet:
         else:
             session.add(
                 SellerConnectionRecord(
-                    connection_key=GLOBAL_CONNECTION_KEY,
-                    session_id=None,
+                    connection_key=connection_key,
+                    session_id=session_id,
                     access_token=token_set.access_token,
                     refresh_token=token_set.refresh_token,
                     token_type=token_set.token_type,
@@ -101,10 +104,10 @@ def save_token_set(token_set: EbayOAuthTokenSet) -> EbayOAuthTokenSet:
     return EbayOAuthTokenSet.model_validate(token_set.model_dump())
 
 
-def get_token_set() -> EbayOAuthTokenSet | None:
+def get_token_set(session_id: str) -> EbayOAuthTokenSet | None:
     with get_db_session() as session:
-        record = session.get(SellerConnectionRecord, GLOBAL_CONNECTION_KEY)
-        if not record:
+        record = session.get(SellerConnectionRecord, session_id)
+        if not record or record.session_id != session_id:
             return None
 
         return EbayOAuthTokenSet(

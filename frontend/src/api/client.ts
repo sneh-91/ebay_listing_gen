@@ -19,7 +19,10 @@ export async function apiRequest<T>(
   init?: RequestInit,
 ): Promise<T> {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
-  const response = await fetch(`${baseUrl}${path}`, init);
+  const response = await fetch(`${baseUrl}${path}`, {
+    credentials: "include",
+    ...init,
+  });
 
   if (!response.ok) {
     let message = "Request failed.";

@@ -137,16 +137,16 @@ def get_default_scopes() -> list[str]:
     return list(DEFAULT_SCOPES)
 
 
-def get_configuration_status() -> EbayConnectionStatus:
+def get_configuration_status(session_id: str) -> EbayConnectionStatus:
     settings = get_settings()
-    token_set = get_token_set()
+    token_set = get_token_set(session_id)
     connected = False
     expires_at: str | None = None
 
     if token_set:
         if _is_access_token_stale(token_set):
             try:
-                token_set = refresh_user_access_token()
+                token_set = refresh_user_access_token(session_id)
                 connected = True
                 expires_at = token_set.expires_at.isoformat()
             except EbayOAuthError:
@@ -166,7 +166,7 @@ def get_configuration_status() -> EbayConnectionStatus:
     )
 
 
-def build_authorization_url() -> str:
+def build_authorization_url(session_id: str) -> str:
     _require_configuration()
     settings = get_settings()
 
@@ -174,6 +174,7 @@ def build_authorization_url() -> str:
     save_pending_state(
         state,
         _utc_now() + timedelta(minutes=STATE_TTL_MINUTES),
+        session_id,
     )
 
     query = urlencode(
@@ -188,10 +189,10 @@ def build_authorization_url() -> str:
     return f"{_get_authorization_endpoint()}?{query}"
 
 
-def exchange_authorization_code(code: str, state: str) -> EbayOAuthTokenSet:
+def exchange_authorization_code(code: str, state: str, session_id: str) -> EbayOAuthTokenSet:
     _require_configuration()
 
-    if not consume_pending_state(state):
+    if not consume_pending_state(state, session_id):
         raise EbayOAuthError(
             "The eBay OAuth state value is missing or expired. Start the connection flow again.",
             status_code=400,
@@ -205,12 +206,12 @@ def exchange_authorization_code(code: str, state: str) -> EbayOAuthTokenSet:
             "redirect_uri": settings.ebay_redirect_uri,
         }
     )
-    return save_token_set(_build_token_set(token_payload))
+    return save_token_set(_build_token_set(token_payload), session_id)
 
 
-def refresh_user_access_token() -> EbayOAuthTokenSet:
+def refresh_user_access_token(session_id: str) -> EbayOAuthTokenSet:
     _require_configuration()
-    existing_token_set = get_token_set()
+    existing_token_set = get_token_set(session_id)
     if not existing_token_set:
         raise EbayOAuthError(
             "No eBay refresh token is stored on the backend.",
@@ -224,12 +225,13 @@ def refresh_user_access_token() -> EbayOAuthTokenSet:
         }
     )
     return save_token_set(
-        _build_token_set(token_payload, refresh_token=existing_token_set.refresh_token)
+        _build_token_set(token_payload, refresh_token=existing_token_set.refresh_token),
+        session_id,
     )
 
 
-def get_valid_access_token() -> str:
-    token_set = get_token_set()
+def get_valid_access_token(session_id: str) -> str:
+    token_set = get_token_set(session_id)
     if not token_set:
         raise EbayOAuthError(
             "No eBay OAuth connection is stored on the backend.",
@@ -237,6 +239,6 @@ def get_valid_access_token() -> str:
         )
 
     if _is_access_token_stale(token_set):
-        token_set = refresh_user_access_token()
+        token_set = refresh_user_access_token(session_id)
 
     return token_set.access_token

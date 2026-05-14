@@ -1,10 +1,11 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 
 from app.models.draft_update import DraftUpdatePayload
 from app.models.listing import ListingDraft
+from app.services.session_service import get_request_session_id
 from app.services.openai_service import (
     ListingGenerationError,
     generate_listing_with_openai,
@@ -46,6 +47,7 @@ def _validate_upload(upload: UploadFile) -> None:
 
 @router.post("/generate-listing", response_model=ListingDraft)
 async def generate_listing(
+    request: Request,
     images: list[UploadFile] | None = File(default=None),
     condition: str | None = Form(default=None),
     known_issues: str | None = Form(default=None, alias="knownIssues"),
@@ -105,20 +107,21 @@ async def generate_listing(
         draftId=f"draft-{uuid4().hex[:12]}",
         **ai_draft.model_dump(),
     )
-    return save_draft(draft)
+    return save_draft(draft, get_request_session_id(request))
 
 
 @router.get("/drafts/{draft_id}", response_model=ListingDraft)
-async def read_draft(draft_id: str) -> ListingDraft:
-    draft = get_draft(draft_id)
+async def read_draft(draft_id: str, request: Request) -> ListingDraft:
+    draft = get_draft(draft_id, get_request_session_id(request))
     if not draft:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
     return draft
 
 
 @router.put("/drafts/{draft_id}", response_model=ListingDraft)
-async def update_draft(draft_id: str, payload: DraftUpdatePayload) -> ListingDraft:
-    existing_draft = get_draft(draft_id)
+async def update_draft(draft_id: str, payload: DraftUpdatePayload, request: Request) -> ListingDraft:
+    session_id = get_request_session_id(request)
+    existing_draft = get_draft(draft_id, session_id)
     if not existing_draft:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
 
@@ -137,4 +140,4 @@ async def update_draft(draft_id: str, payload: DraftUpdatePayload) -> ListingDra
             ),
         }
     )
-    return save_draft(updated_draft)
+    return save_draft(updated_draft, session_id)
