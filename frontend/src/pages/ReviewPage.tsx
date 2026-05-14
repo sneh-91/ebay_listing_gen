@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { getListingDraft, updateListingDraft } from "../api/listings";
 import { BuyerQuestionsCard } from "../components/BuyerQuestionsCard";
@@ -20,12 +20,6 @@ type ReviewPageProps = {
 
 type ReviewDraftState = DraftUpdatePayload;
 
-type StoredPreviewImage = {
-  id: string;
-  previewUrl: string;
-  name: string;
-};
-
 const conditionOptions: Exclude<ListingCondition, "">[] = [
   "New",
   "Like New",
@@ -45,21 +39,6 @@ function buildEditableState(draft: ListingDraft): ReviewDraftState {
       rationale: draft.priceSuggestion.rationale,
     },
   };
-}
-
-function getStoredPreviewImages(draftId: string): StoredPreviewImage[] {
-  const rawValue = window.sessionStorage.getItem(`listing-draft:${draftId}`);
-
-  if (!rawValue) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as { previewImages?: StoredPreviewImage[] };
-    return parsed.previewImages ?? [];
-  } catch {
-    return [];
-  }
 }
 
 function parseItemSpecifics(text: string): ItemSpecific[] {
@@ -96,8 +75,6 @@ export function ReviewPage({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
-  const previewImages = useMemo(() => getStoredPreviewImages(draftId), [draftId]);
 
   useEffect(() => {
     let isActive = true;
@@ -282,25 +259,27 @@ export function ReviewPage({
 
         <WarningBanner warnings={draft.missingInfoWarnings} />
 
-        {previewImages.length > 0 ? (
+        {draft.imageUrls.length > 0 ? (
           <section className="rounded-[1.75rem] border border-white/10 bg-surface/70 p-6">
             <p className="text-sm uppercase tracking-[0.25em] text-muted">
               Uploaded Images
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {previewImages.map((image) => (
+              {draft.imageUrls.map((imageUrl, index) => (
                 <article
-                  key={image.id}
+                  key={imageUrl}
                   className="overflow-hidden rounded-[1.5rem] border border-white/8 bg-surfaceAlt/70"
                 >
                   <div className="aspect-[4/3] overflow-hidden bg-background">
                     <img
-                      src={image.previewUrl}
-                      alt={image.name}
+                      src={imageUrl}
+                      alt={`Uploaded image ${index + 1}`}
                       className="h-full w-full object-cover"
                     />
                   </div>
-                  <p className="truncate px-4 py-3 text-sm text-muted">{image.name}</p>
+                  <p className="truncate px-4 py-3 text-sm text-muted">
+                    Uploaded image {index + 1}
+                  </p>
                 </article>
               ))}
             </div>

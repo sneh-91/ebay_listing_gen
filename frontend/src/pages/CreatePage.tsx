@@ -33,27 +33,6 @@ function createImageId(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`;
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-
-      reject(new Error("Unable to read image preview data."));
-    };
-
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Unable to read image preview data."));
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
 export function CreatePage({ onNavigateHome }: CreatePageProps) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [formValues, setFormValues] =
@@ -165,20 +144,6 @@ export function CreatePage({ onNavigateHome }: CreatePageProps) {
 
     try {
       const draft = await generateListingDraft(images, formValues);
-      const previewImages = await Promise.all(
-        images.map(async (image) => ({
-          id: image.id,
-          previewUrl: await readFileAsDataUrl(image.file),
-          name: image.file.name,
-        })),
-      );
-
-      window.sessionStorage.setItem(
-        `listing-draft:${draft.draftId}`,
-        JSON.stringify({
-          previewImages,
-        }),
-      );
       window.history.pushState({}, "", `/review/${draft.draftId}`);
       window.dispatchEvent(new PopStateEvent("popstate"));
     } catch (error) {

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 ConditionValue = Literal["New", "Like New", "Used", "For parts/not working"]
@@ -39,3 +39,4 @@ class ListingDraft(BaseModel):
     searchKeywords: list[str]
     buyerQuestions: list[BuyerQuestion]
     missingInfoWarnings: list[str]
+    imageUrls: list[str] = Field(default_factory=list)

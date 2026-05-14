@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "listcraft_session"
     session_ttl_days: int = 7
     session_cookie_secure: bool = False
+    s3_bucket_name: str = ""
+    s3_region: str = ""
+    s3_public_base_url: str = ""
+    s3_key_prefix: str = "draft-images"
     openai_api_key: str = ""
     openai_model: str = "gpt-5.4-mini"
     ebay_client_id: str = ""

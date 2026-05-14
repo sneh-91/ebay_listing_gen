@@ -101,4 +101,5 @@ def build_mock_listing_draft(
             },
         ],
         missingInfoWarnings=warnings,
+        imageUrls=[],
     )

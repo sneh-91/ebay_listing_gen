@@ -10,8 +10,18 @@ from app.services.openai_service import (
     ListingGenerationError,
     generate_listing_with_openai,
 )
+from app.services.image_storage_service import (
+    delete_draft_images,
+    ImageStorageError,
+    StoredDraftImage,
+    upload_draft_image,
+)
 from app.storage.draft_store import get_draft, save_draft
-from app.utils.image_processing import ImageProcessingError, preprocess_image_for_openai
+from app.utils.image_processing import (
+    ImageProcessingError,
+    preprocess_image_for_openai,
+    preprocess_image_for_storage,
+)
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -62,6 +72,7 @@ async def generate_listing(
         _raise_validation_error(f"You can upload up to {MAX_IMAGES} images per listing draft.")
 
     processed_images: list[str] = []
+    storage_images: list[tuple[bytes, str]] = []
 
     for upload in images:
         _validate_upload(upload)
@@ -81,6 +92,12 @@ async def generate_listing(
         try:
             processed_images.append(
                 preprocess_image_for_openai(
+                    file_bytes=contents,
+                    filename=upload.filename or "uploaded file",
+                )
+            )
+            storage_images.append(
+                preprocess_image_for_storage(
                     file_bytes=contents,
                     filename=upload.filename or "uploaded file",
                 )
@@ -106,8 +123,42 @@ async def generate_listing(
     draft = ListingDraft(
         draftId=f"draft-{uuid4().hex[:12]}",
         **ai_draft.model_dump(),
+        imageUrls=[],
     )
-    return save_draft(draft, get_request_session_id(request))
+    stored_images: list[StoredDraftImage] = []
+    try:
+        for index, (image_bytes, mime_type) in enumerate(storage_images):
+            stored_images.append(
+                upload_draft_image(
+                    draft_id=draft.draftId,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                    sort_order=index,
+                )
+            )
+    except ImageStorageError as exc:
+        delete_draft_images(stored_images)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    draft.imageUrls = [image.public_url for image in stored_images]
+    try:
+        return save_draft(
+            draft,
+            get_request_session_id(request),
+            image_assets=stored_images,
+        )
+    except ValueError as exc:
+        delete_draft_images(stored_images)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        delete_draft_images(stored_images)
+        raise
 
 
 @router.get("/drafts/{draft_id}", response_model=ListingDraft)

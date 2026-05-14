@@ -6,6 +6,7 @@ from app.config import get_settings
 from app.routes.ebay import router as ebay_router
 from app.routes.health import router as health_router
 from app.routes.listings import router as listings_router
+from app.services.cleanup_service import maybe_run_periodic_cleanup
 from app.services.session_service import (
     apply_session_cookie,
     resolve_or_create_session,
@@ -31,6 +32,7 @@ app.include_router(ebay_router)
 
 @app.middleware("http")
 async def attach_session(request: Request, call_next):
+    maybe_run_periodic_cleanup()
     session_cookie = request.cookies.get(settings.session_cookie_name)
     resolved_session = resolve_or_create_session(session_cookie)
     request.state.session_id = resolved_session.session_id

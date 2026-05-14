@@ -54,6 +54,7 @@ export type ListingDraft = {
   searchKeywords: string[];
   buyerQuestions: BuyerQuestion[];
   missingInfoWarnings: string[];
+  imageUrls: string[];
 };
 
 export type DraftUpdatePayload = {
