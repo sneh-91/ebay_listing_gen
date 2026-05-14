@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.models.ebay_oauth import EbayConnectionStatus, EbayOAuthStartResponse
+from app.models.ebay_category import EbayCategoryStatus
 from app.models.ebay_setup import EbaySetupStatus
 from app.services.ebay_oauth_service import (
     EbayOAuthError,
@@ -13,6 +14,7 @@ from app.services.ebay_oauth_service import (
     get_configuration_status,
 )
 from app.services.ebay_setup_service import get_setup_status
+from app.services.ebay_taxonomy_service import EbayTaxonomyError, get_category_status
 from app.services.session_service import get_request_session_id
 from app.storage.draft_store import get_draft
 
@@ -91,3 +93,19 @@ async def ebay_setup_status(
         return get_setup_status(session_id, draft)
     except EbayOAuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/category/status", response_model=EbayCategoryStatus)
+async def ebay_category_status(
+    request: Request,
+    draftId: str = Query(...),
+) -> EbayCategoryStatus:
+    session_id = get_request_session_id(request)
+    draft = get_draft(draftId, session_id)
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+
+    try:
+        return get_category_status(session_id, draft)
+    except EbayTaxonomyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

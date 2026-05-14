@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, s
 
 from app.models.draft_update import DraftUpdatePayload
 from app.models.listing import ListingDraft
+from app.services.ebay_taxonomy_service import resolve_category_selection
 from app.services.session_service import get_request_session_id
 from app.services.openai_service import (
     ListingGenerationError,
@@ -190,11 +191,13 @@ async def update_draft(draft_id: str, payload: DraftUpdatePayload, request: Requ
     if not existing_draft:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
 
+    resolved_category_text, resolved_category_id = resolve_category_selection(payload.categoryText)
     updated_draft = existing_draft.model_copy(
         update={
             "title": payload.title,
-            "categorySuggestion": payload.categoryText,
-            "categoryText": payload.categoryText,
+            "categorySuggestion": resolved_category_text,
+            "categoryText": resolved_category_text,
+            "categoryId": resolved_category_id,
             "condition": payload.condition,
             "description": payload.description,
             "itemSpecifics": payload.itemSpecifics,

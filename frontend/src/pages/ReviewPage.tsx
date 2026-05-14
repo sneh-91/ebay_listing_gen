@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
-import { getEbaySetupStatus } from "../api/ebay";
+import { getEbayCategoryStatus, getEbaySetupStatus } from "../api/ebay";
 import { getListingDraft, updateListingDraft } from "../api/listings";
 import { BuyerQuestionsCard } from "../components/BuyerQuestionsCard";
 import { EditableField } from "../components/EditableField";
 import { PriceSuggestionCard } from "../components/PriceSuggestionCard";
 import { WarningBanner } from "../components/WarningBanner";
-import type { EbayLocationOption, EbayPolicyOption, EbaySetupStatus } from "../types/ebay";
+import type {
+  EbayAspectRequirement,
+  EbayCategoryOption,
+  EbayCategoryStatus,
+  EbayLocationOption,
+  EbayPolicyOption,
+  EbaySetupStatus,
+} from "../types/ebay";
 import type {
   DraftUpdatePayload,
   ItemSpecific,
@@ -98,6 +105,9 @@ export function ReviewPage({
   const [setupStatus, setSetupStatus] = useState<EbaySetupStatus | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [isLoadingSetup, setIsLoadingSetup] = useState(false);
+  const [categoryStatus, setCategoryStatus] = useState<EbayCategoryStatus | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [isLoadingCategory, setIsLoadingCategory] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -131,6 +141,57 @@ export function ReviewPage({
       }
     };
 
+    const loadCategoryStatus = async (baseDraft: ListingDraft) => {
+      setIsLoadingCategory(true);
+      setCategoryError(null);
+
+      try {
+        const nextCategoryStatus = await getEbayCategoryStatus(draftId);
+        if (!isActive) {
+          return;
+        }
+        const syncedDraft = {
+          ...baseDraft,
+          categoryText: nextCategoryStatus.selectedCategoryLabel || baseDraft.categoryText,
+          categorySuggestion:
+            nextCategoryStatus.selectedCategoryLabel || baseDraft.categorySuggestion,
+          categoryId: nextCategoryStatus.categoryId,
+        };
+        setCategoryStatus(nextCategoryStatus);
+        setDraft((currentDraft) =>
+          currentDraft
+            ? {
+                ...currentDraft,
+                categoryText: syncedDraft.categoryText,
+                categorySuggestion: syncedDraft.categorySuggestion,
+                categoryId: syncedDraft.categoryId,
+              }
+            : syncedDraft,
+        );
+        setFormState((currentState) =>
+          currentState
+            ? {
+                ...currentState,
+                categoryText: syncedDraft.categoryText,
+              }
+            : buildEditableState(syncedDraft),
+        );
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Unable to load category requirements.";
+        setCategoryError(message);
+      } finally {
+        if (isActive) {
+          setIsLoadingCategory(false);
+        }
+      }
+    };
+
     const loadDraft = async () => {
       setIsLoading(true);
       setErrorMessage(null);
@@ -144,6 +205,7 @@ export function ReviewPage({
         setFormState(buildEditableState(nextDraft));
         setItemSpecificsText(stringifyItemSpecifics(nextDraft.itemSpecifics));
         void loadSetupStatus(nextDraft);
+        void loadCategoryStatus(nextDraft);
       } catch (error) {
         if (!isActive) {
           return;
@@ -209,6 +271,23 @@ export function ReviewPage({
             ? error.message
             : "Unable to refresh eBay setup status.";
         setSetupError(message);
+      }
+      try {
+        const nextCategoryStatus = await getEbayCategoryStatus(draftId);
+        setCategoryStatus(nextCategoryStatus);
+        nextDraft = {
+          ...nextDraft,
+          categoryText: nextCategoryStatus.selectedCategoryLabel || nextDraft.categoryText,
+          categorySuggestion:
+            nextCategoryStatus.selectedCategoryLabel || nextDraft.categorySuggestion,
+          categoryId: nextCategoryStatus.categoryId,
+        };
+      } catch (error) {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Unable to refresh category requirements.";
+        setCategoryError(message);
       }
       setDraft(nextDraft);
       setFormState(buildEditableState(nextDraft));
@@ -377,14 +456,17 @@ export function ReviewPage({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <EditableField label="Category suggestion">
-                <input
-                  type="text"
+                <select
                   value={formState.categoryText}
                   className="w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-text outline-none transition focus:border-sky-300/60"
-                  onChange={(event) =>
-                    setField("categoryText", event.target.value)
-                  }
-                />
+                  onChange={(event) => setField("categoryText", event.target.value)}
+                >
+                  {(categoryStatus?.options || []).map((option) => (
+                    <option key={option.key} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </EditableField>
 
               <EditableField label="Condition" hint={draft.conditionDescription}>
@@ -431,6 +513,11 @@ export function ReviewPage({
 
           <div className="space-y-6">
             <PublishDetailsCard draft={draft} />
+            <CategoryStatusCard
+              categoryStatus={categoryStatus}
+              categoryError={categoryError}
+              isLoadingCategory={isLoadingCategory}
+            />
             <EbaySetupCard
               setupStatus={setupStatus}
               setupError={setupError}
@@ -461,6 +548,92 @@ export function ReviewPage({
         </section>
       </div>
     </main>
+  );
+}
+
+type CategoryStatusCardProps = {
+  categoryStatus: EbayCategoryStatus | null;
+  categoryError: string | null;
+  isLoadingCategory: boolean;
+};
+
+function CategoryStatusCard({
+  categoryStatus,
+  categoryError,
+  isLoadingCategory,
+}: CategoryStatusCardProps) {
+  return (
+    <section className="rounded-[1.75rem] border border-white/10 bg-surface/80 p-6">
+      <p className="text-sm uppercase tracking-[0.25em] text-muted">
+        Category Requirements
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        Category ID: {categoryStatus?.categoryId || "Pending resolution"}
+      </p>
+
+      {isLoadingCategory ? (
+        <p className="mt-4 rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3 text-sm text-muted">
+          Checking supported category and required specifics...
+        </p>
+      ) : null}
+
+      {categoryError ? (
+        <p className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+          {categoryError}
+        </p>
+      ) : null}
+
+      {categoryStatus?.blockers.length ? (
+        <div className="mt-4 space-y-3">
+          {categoryStatus.blockers.map((blocker) => (
+            <p
+              key={blocker.code}
+              className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
+            >
+              {blocker.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {categoryStatus?.warnings.length ? (
+        <div className="mt-4 space-y-3">
+          {categoryStatus.warnings.map((warning) => (
+            <p
+              key={warning.code}
+              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-50"
+            >
+              {warning.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {categoryStatus?.requiredAspects.length ? (
+        <div className="mt-5 space-y-3">
+          {categoryStatus.requiredAspects.map((aspect) => (
+            <AspectRow key={aspect.name} aspect={aspect} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type AspectRowProps = {
+  aspect: EbayAspectRequirement;
+};
+
+function AspectRow({ aspect }: AspectRowProps) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-surfaceAlt/70 px-4 py-3 text-sm text-slate-200">
+      <p className="font-medium">{aspect.name}</p>
+      <p className="mt-1 text-muted">
+        {aspect.satisfied
+          ? `Current value: ${aspect.currentValue}`
+          : "Missing or unresolved in item specifics"}
+      </p>
+    </div>
   );
 }
 

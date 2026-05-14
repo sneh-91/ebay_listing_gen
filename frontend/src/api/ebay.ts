@@ -1,5 +1,6 @@
 import { apiRequest } from "./client";
 import type {
+  EbayCategoryStatus,
   EbayConnectionStatus,
   EbayOAuthStartResponse,
   EbaySetupStatus,
@@ -16,4 +17,8 @@ export async function getEbayAuthorizationUrl(): Promise<string> {
 
 export async function getEbaySetupStatus(draftId: string): Promise<EbaySetupStatus> {
   return apiRequest<EbaySetupStatus>(`/api/ebay/setup/status?draftId=${encodeURIComponent(draftId)}`);
+}
+
+export async function getEbayCategoryStatus(draftId: string): Promise<EbayCategoryStatus> {
+  return apiRequest<EbayCategoryStatus>(`/api/ebay/category/status?draftId=${encodeURIComponent(draftId)}`);
 }

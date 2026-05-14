@@ -54,3 +54,28 @@ export type EbaySetupStatus = {
   returnPolicies: EbayPolicyOption[];
   merchantLocations: EbayLocationOption[];
 };
+
+export type EbayCategoryOption = {
+  key: string;
+  label: string;
+  categoryId: string;
+};
+
+export type EbayAspectRequirement = {
+  name: string;
+  required: boolean;
+  currentValue: string | null;
+  satisfied: boolean;
+};
+
+export type EbayCategoryStatus = {
+  resolved: boolean;
+  selectedCategoryKey: string | null;
+  selectedCategoryLabel: string | null;
+  categoryId: string | null;
+  blockers: EbaySetupMessage[];
+  warnings: EbaySetupMessage[];
+  options: EbayCategoryOption[];
+  requiredAspects: EbayAspectRequirement[];
+  missingRequiredAspects: string[];
+};
