@@ -49,6 +49,12 @@ export function LandingPage({ onCreateListing }: LandingPageProps) {
           return;
         }
         setEbayStatus(nextStatus);
+        if (nextStatus.requiresReconnect) {
+          setStatusMessage(
+            "Reconnect eBay to grant the latest seller-account read permissions needed for setup validation.",
+          );
+          setStatusTone("error");
+        }
       } catch (error) {
         if (!isActive) {
           return;

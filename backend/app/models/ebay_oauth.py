@@ -21,7 +21,9 @@ class EbayOAuthTokenSet(BaseModel):
 class EbayConnectionStatus(BaseModel):
     configured: bool
     connected: bool
+    requiresReconnect: bool
     environment: Literal["sandbox", "production"]
     marketplaceId: str
     scope: list[str]
+    missingScopes: list[str]
     expiresAt: str | None = None

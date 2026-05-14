@@ -21,9 +21,12 @@ export function LandingHero({
 }: LandingHeroProps) {
   const ebayConnected = ebayStatus?.connected ?? false;
   const ebayConfigured = ebayStatus?.configured ?? false;
+  const ebayRequiresReconnect = ebayStatus?.requiresReconnect ?? false;
   const ebayStatusLabel = isCheckingEbayStatus
     ? "Checking eBay connection"
-    : ebayConnected
+    : ebayRequiresReconnect
+      ? "eBay connection needs renewed permissions"
+      : ebayConnected
       ? `Connected to eBay ${ebayStatus?.environment}`
       : ebayConfigured
         ? `Not connected to eBay ${ebayStatus?.environment}`
@@ -79,7 +82,7 @@ export function LandingHero({
             >
               {isConnectingEbay
                 ? "Redirecting to eBay..."
-                : ebayConnected
+                : ebayConnected || ebayRequiresReconnect
                   ? "Reconnect eBay"
                   : "Connect eBay"}
             </button>

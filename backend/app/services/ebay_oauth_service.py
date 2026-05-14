@@ -16,7 +16,11 @@ from app.storage.ebay_oauth_store import (
 )
 
 EBAY_SCOPE_SELL_INVENTORY = "https://api.ebay.com/oauth/api_scope/sell.inventory"
-DEFAULT_SCOPES = [EBAY_SCOPE_SELL_INVENTORY]
+EBAY_SCOPE_SELL_ACCOUNT_READONLY = "https://api.ebay.com/oauth/api_scope/sell.account.readonly"
+DEFAULT_SCOPES = [
+    EBAY_SCOPE_SELL_INVENTORY,
+    EBAY_SCOPE_SELL_ACCOUNT_READONLY,
+]
 STATE_TTL_MINUTES = 10
 ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 60
 
@@ -137,31 +141,50 @@ def get_default_scopes() -> list[str]:
     return list(DEFAULT_SCOPES)
 
 
+def _split_scope_value(scope_value: str | None) -> list[str]:
+    if not scope_value:
+        return []
+    return [scope for scope in scope_value.split() if scope]
+
+
+def _get_missing_required_scopes(scope_value: str | None) -> list[str]:
+    granted = set(_split_scope_value(scope_value))
+    return [scope for scope in DEFAULT_SCOPES if scope not in granted]
+
+
 def get_configuration_status(session_id: str) -> EbayConnectionStatus:
     settings = get_settings()
     token_set = get_token_set(session_id)
     connected = False
+    requires_reconnect = False
     expires_at: str | None = None
+    missing_scopes = get_default_scopes()
 
     if token_set:
+        missing_scopes = _get_missing_required_scopes(token_set.scope)
+        requires_reconnect = bool(missing_scopes)
         if _is_access_token_stale(token_set):
             try:
                 token_set = refresh_user_access_token(session_id)
-                connected = True
+                missing_scopes = _get_missing_required_scopes(token_set.scope)
+                requires_reconnect = bool(missing_scopes)
+                connected = not requires_reconnect
                 expires_at = token_set.expires_at.isoformat()
             except EbayOAuthError:
                 connected = False
                 expires_at = token_set.expires_at.isoformat()
         else:
-            connected = True
+            connected = not requires_reconnect
             expires_at = token_set.expires_at.isoformat()
 
     return EbayConnectionStatus(
         configured=_is_configured(),
         connected=connected,
+        requiresReconnect=requires_reconnect,
         environment=settings.ebay_env,
         marketplaceId=settings.ebay_marketplace_id,
-        scope=(token_set.scope.split() if token_set else get_default_scopes()),
+        scope=(_split_scope_value(token_set.scope) if token_set else get_default_scopes()),
+        missingScopes=missing_scopes,
         expiresAt=expires_at,
     )
 
